@@ -11,6 +11,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ProfileSetup from './pages/ProfileSetup';
 import Profile from './pages/Profile';
+import ProfileView from './pages/ProfileView';
 import Chatbot from './pages/Chatbot';
 import Alerts from './pages/Alerts';
 import Home from './pages/Home';
@@ -166,6 +167,21 @@ function App() {
                 } />
                 
                 <Route path="/profile" element={
+                  <ProtectedRoute>
+                    <motion.div
+                      initial="initial"
+                      animate="in"
+                      exit="out"
+                      variants={pageVariants}
+                      transition={pageTransition}
+                    >
+                      <Navbar />
+                      <ProfileView />
+                    </motion.div>
+                  </ProtectedRoute>
+                } />
+                
+                <Route path="/profile/setup" element={
                   <ProtectedRoute>
                     <motion.div
                       initial="initial"
