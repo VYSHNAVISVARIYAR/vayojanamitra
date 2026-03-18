@@ -122,3 +122,9 @@ async def trigger_proactive():
     agent = ProactiveAgent(db)
     await agent.run_daily_checks()
     return {"message": "Proactive agent completed"}
+
+# ── LLM Stats endpoint ──
+@app.get("/admin/llm-stats")
+async def llm_stats():
+    from utils.llm_rotator import llm_rotator
+    return llm_rotator.get_stats()

@@ -11,7 +11,7 @@ from scraper.sources import SOURCES
 from config import settings
 from models.scheme_schema import SchemeCreate
 from db.chroma import chroma_client
-from utils.llm import call_llm
+from utils.llm_rotator import llm_rotator
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -177,7 +177,12 @@ Text to extract from:
 """
 
     try:
-        content = await call_llm(prompt, max_tokens=1000)
+        # Use Groq first for scraping (faster JSON extraction)
+        content = await llm_rotator.call(
+            prompt,
+            max_tokens=1000,
+            prefer="groq"  # Groq first for scraping
+        )
         
         if not content:
             print(f"❌ Empty response for {source_url}")

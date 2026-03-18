@@ -281,8 +281,8 @@ Focus on:
 - User's demonstrated interests (bookmarks)
 """
             
-            from utils.llm import call_llm
-            content = await call_llm(prompt, max_tokens=2000)
+            from utils.llm_rotator import llm_rotator
+            content = await llm_rotator.call(prompt, max_tokens=2000, prefer="gemini")
             if not content:
                 raise Exception("LLM returned empty response")
             

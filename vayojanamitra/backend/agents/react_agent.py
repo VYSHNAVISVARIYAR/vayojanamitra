@@ -8,7 +8,7 @@ from config import settings
 import httpx
 import os
 from bson import ObjectId
-import google.generativeai as genai
+from utils.llm_rotator import llm_rotator
 
 class ReActAgent:
     
@@ -21,55 +21,12 @@ class ReActAgent:
         self.steps = []
         self.start_time = time.time()
         
-        # Initialize Gemini
-        genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-        self.gemini_model = genai.GenerativeModel('gemini-pro')
-        
-        # Initialize OpenRouter
-        self.openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
-        self.openrouter_url = "https://openrouter.ai/api/v1/chat/completions"
+        # Initialize tools
+        self.tools = AgentTools(db)
     
-    async def _call_gemini(self, prompt: str) -> str:
-        """Call Gemini API"""
-        try:
-            response = self.gemini_model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            print(f"Gemini API error: {e}")
-            return ""
-    
-    async def _call_openrouter(self, prompt: str, model: str = "anthropic/claude-3-haiku") -> str:
-        """Call OpenRouter API"""
-        try:
-            headers = {
-                "Authorization": f"Bearer {self.openrouter_api_key}",
-                "Content-Type": "application/json"
-            }
-            data = {
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}]
-            }
-            async with httpx.AsyncClient() as client:
-                response = await client.post(self.openrouter_url, headers=headers, json=data)
-                if response.status_code == 200:
-                    result = response.json()
-                    return result["choices"][0]["message"]["content"]
-                else:
-                    print(f"OpenRouter API error: {response.status_code}")
-                    return ""
-        except Exception as e:
-            print(f"OpenRouter API error: {e}")
-            return ""
-    
-    async def _call_ai(self, prompt: str, use_gemini: bool = True) -> str:
-        """Call AI API - tries Gemini first, falls back to OpenRouter"""
-        if use_gemini:
-            result = await self._call_gemini(prompt)
-            if result:
-                return result
-        
-        # Fallback to OpenRouter
-        return await self._call_openrouter(prompt)
+    async def _call_ai(self, prompt: str, max_tokens: int = 400, prefer: str = "gemini") -> str:
+        """Call AI API with automatic rotation - uses Gemini first, falls back to Groq"""
+        return await llm_rotator.call(prompt, max_tokens=max_tokens, prefer=prefer)
     
     async def run(self, message: str) -> dict:
         """
