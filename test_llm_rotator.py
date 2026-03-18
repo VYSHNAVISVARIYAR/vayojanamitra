@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 # Add backend to path
-backend_path = Path(__file__).parent / "backend"
+backend_path = Path(__file__).parent / "vayojanamitra" / "backend"
 sys.path.insert(0, str(backend_path))
 
 from utils.llm_rotator import llm_rotator
@@ -95,27 +95,17 @@ async def show_stats():
     print("=" * 50)
     
     stats = llm_rotator.get_stats()
-    details = llm_rotator.get_key_details()
     
-    print(f"Gemini keys loaded: {stats['gemini_keys_loaded']}")
-    print(f"Groq keys loaded: {stats['groq_keys_loaded']}")
-    print(f"Gemini calls today: {stats['gemini_calls_today']}")
-    print(f"Groq calls today: {stats['groq_calls_today']}")
-    print(f"Failed calls: {stats['failed_calls']}")
-    print(f"Blocked keys: {stats['blocked_keys_count']}")
-    print(f"Total calls: {stats['total_calls']}")
-    print(f"Last reset: {stats['last_reset']}")
-    
-    print("\n🔑 Key Details:")
-    print("\nGemini Keys:")
-    for key in details['gemini_keys']:
-        status = "🔴 BLOCKED" if key['is_blocked'] else "🟢 Available"
-        print(f"  Key {key['index']}: {status} - {key['calls_today']} calls today")
-    
-    print("\nGroq Keys:")
-    for key in details['groq_keys']:
-        status = "🔴 BLOCKED" if key['is_blocked'] else "🟢 Available"
-        print(f"  Key {key['index']}: {status} - {key['calls_today']} calls today")
+    print(f"Gemini keys loaded: {stats['keys_loaded']['gemini']}")
+    print(f"Groq keys loaded: {stats['keys_loaded']['groq']}")
+    print(f"OpenRouter keys loaded: {stats['keys_loaded']['openrouter']}")
+    print(f"Gemini calls today: {stats['calls_today']['gemini']}")
+    print(f"Groq calls today: {stats['calls_today']['groq']}")
+    print(f"OpenRouter calls today: {stats['calls_today']['openrouter']}")
+    print(f"Failed calls: {stats['calls_today']['failed']}")
+    print(f"Blocked keys: {stats['blocked_keys']}")
+    print(f"Total calls: {stats['calls_today']['total']}")
+    print(f"Tokens per day estimate: {stats['tokens_per_day_estimate']['total_guaranteed']:,}")
 
 async def test_real_scenario():
     """Test a real scenario like scheme extraction"""
@@ -154,13 +144,13 @@ async def main():
     
     # Check if keys are configured
     stats = llm_rotator.get_stats()
-    if stats['gemini_keys_loaded'] == 0 and stats['groq_keys_loaded'] == 0:
+    if stats['keys_loaded']['gemini'] == 0 and stats['keys_loaded']['groq'] == 0:
         print("❌ No API keys found! Please configure your .env file:")
         print("   GEMINI_API_KEY_1=your_key_here")
         print("   GROQ_API_KEY_1=your_key_here")
         return
     
-    print(f"✅ Found {stats['gemini_keys_loaded']} Gemini keys and {stats['groq_keys_loaded']} Groq keys")
+    print(f"✅ Found {stats['keys_loaded']['gemini']} Gemini keys and {stats['keys_loaded']['groq']} Groq keys")
     
     # Run tests
     await test_basic_calls()
