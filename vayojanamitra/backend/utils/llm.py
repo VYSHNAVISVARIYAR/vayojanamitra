@@ -20,7 +20,8 @@ async def call_gemini(prompt: str, max_tokens: int = 500) -> str:
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
+        # Use the correct model name for current API version
+        model = genai.GenerativeModel('models/gemini-2.5-flash')
         response = model.generate_content(prompt)
         content = response.text.strip()
         print(f"✅ Gemini response received ({len(content)} chars)")
@@ -29,7 +30,7 @@ async def call_gemini(prompt: str, max_tokens: int = 500) -> str:
         print(f"❌ Gemini error: {e}")
         raise Exception(f"Gemini API error: {e}")
 
-async def call_openrouter(prompt: str, max_tokens: int = 500) -> str:
+async def call_openrouter(prompt: str, max_tokens: int = 50) -> str:
     """
     Call OpenRouter API - backup LLM provider
     Multiple model options, pay-as-you-go
@@ -49,9 +50,9 @@ async def call_openrouter(prompt: str, max_tokens: int = 500) -> str:
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "anthropic/claude-3-haiku",
+                    "model": "openrouter/auto",  # Auto-select best available model
                     "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens
+                    "max_tokens": max_tokens  # Reduced to 200 to save credits
                 }
             )
             
@@ -73,7 +74,7 @@ async def call_openrouter(prompt: str, max_tokens: int = 500) -> str:
             raise RateLimitError("OpenRouter rate limit exceeded")
         raise
 
-async def call_llm(prompt: str, max_tokens: int = 500) -> str:
+async def call_llm(prompt: str, max_tokens: int = 50) -> str:
     """
     Main LLM caller with automatic fallback
     Primary: Gemini (better Kerala knowledge, stable)
