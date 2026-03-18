@@ -53,6 +53,7 @@ async def fetch_html(url: str) -> str:
         "https://welfarepension.lsgkerala.gov.in",
         "https://nrhm.kerala.gov.in",
         "https://www.keralaagriculture.gov.in/en/farmer-welfare/",
+        "https://keralaagriculture.gov.in/en/schemes/",
         "https://www.kerala.gov.in/housing-schemes",
         "https://www.kudumbashree.org/pages/163",
         "https://labour.kerala.gov.in/schemes/",

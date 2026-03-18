@@ -135,6 +135,11 @@ SOURCES = [
         "url": "https://www.keralaagriculture.gov.in/en/farmer-welfare/",
         "category": "Agriculture"
     },
+    {
+        "name": "Kerala Agriculture Schemes",
+        "url": "https://keralaagriculture.gov.in/en/schemes/",
+        "category": "Agriculture"
+    },
 
     # Kerala Housing Board
     {
