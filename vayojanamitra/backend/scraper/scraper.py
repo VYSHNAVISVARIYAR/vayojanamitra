@@ -91,6 +91,44 @@ async def fetch_html(url: str) -> str:
         response.raise_for_status()
         return response.text
 
+def clean_document_requirements(documents: list) -> list:
+    """Clean and validate document requirements list."""
+    if not documents or not isinstance(documents, list):
+        return []
+    
+    cleaned_docs = []
+    for doc in documents:
+        if not doc or doc == "Not specified":
+            continue
+            
+        # Clean up the document name
+        cleaned_doc = doc.strip()
+        
+        # Remove common prefixes/suffixes
+        prefixes_to_remove = ["Copy of ", "Original ", "Self-attested "]
+        for prefix in prefixes_to_remove:
+            if cleaned_doc.startswith(prefix):
+                cleaned_doc = cleaned_doc[len(prefix):]
+        
+        # Capitalize properly
+        cleaned_doc = cleaned_doc.title()
+        
+        # Skip if too short or too generic
+        if len(cleaned_doc) < 3 or cleaned_doc.lower() in ["id", "proof", "card"]:
+            continue
+            
+        cleaned_docs.append(cleaned_doc)
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_docs = []
+    for doc in cleaned_docs:
+        if doc not in seen:
+            seen.add(doc)
+            unique_docs.append(doc)
+    
+    return unique_docs
+
 async def extract_schemes_with_ai(raw_text: str, source_url: str) -> list:
     # Clean and trim text first
     clean_text = " ".join(raw_text.split())[:settings.MAX_TEXT_LENGTH]  # limit text length
@@ -112,6 +150,15 @@ IMPORTANT RULES:
 5. "general" ONLY if no other category fits
 6. If a field has no data write "Not specified"
 
+DOCUMENT REQUIREMENTS EXTRACTION:
+- Look for specific document names mentioned in the text
+- Examples: "Aadhaar card", "Voter ID", "Ration card", "Income certificate", 
+  "Age proof", "Disability certificate", "Bank passbook", "Passport photo",
+  "Domicile certificate", "Caste certificate", "BPL card", "Land records"
+- Extract ONLY documents explicitly mentioned in the text
+- Do NOT add generic documents unless specified in the source text
+- If no documents are mentioned, use empty array []
+
 Return ONLY a valid JSON array. No markdown. No explanation.
 
 Each object must have:
@@ -120,7 +167,7 @@ Each object must have:
   "description": "what this scheme is about",
   "benefits": "what the beneficiary receives (amount, services)",
   "eligibility": "who can apply (age, income, occupation, etc)",
-  "documents_required": ["doc1", "doc2"],
+  "documents_required": ["specific document1", "specific document2"],
   "application_process": "how to apply",
   "category": "one of the 8 categories above"
 }}
@@ -146,6 +193,12 @@ Text to extract from:
                 content = "\n".join(lines[1:-1])
                 
         schemes = json.loads(content)
+        
+        # Clean and validate document requirements for each scheme
+        for scheme in schemes:
+            if 'documents_required' in scheme:
+                scheme['documents_required'] = clean_document_requirements(scheme['documents_required'])
+        
         print(f"✅ Extracted {len(schemes)} schemes from {source_url}")
         return schemes
 
