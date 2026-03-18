@@ -7,11 +7,33 @@ from typing import List, Dict, Any, Optional
 import httpx
 from bs4 import BeautifulSoup
 from motor.motor_asyncio import AsyncIOMotorClient
+from urllib.parse import urljoin, urlparse
+from datetime import datetime, timedelta
 from scraper.sources import SOURCES
 from config import settings
 from models.scheme_schema import SchemeCreate
 from db.chroma import chroma_client
+from db.mongo import get_db
 from utils.llm_rotator import llm_rotator
+import hashlib
+
+# Response cache for scraper (ZERO TOKENS for duplicate scrapes)
+class ScraperCache:
+    def __init__(self):
+        self.cache = {}  # in-memory cache
+    
+    def get_key(self, text: str) -> str:
+        return hashlib.md5(text.encode()).hexdigest()[:16]
+    
+    def get(self, text: str):
+        key = self.get_key(text)
+        return self.cache.get(key)
+    
+    def set(self, text: str, response: str):
+        key = self.get_key(text)
+        self.cache[key] = response
+
+scraper_cache = ScraperCache()
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -31,7 +53,8 @@ def extract_text_from_html(html: str) -> str:
         if len(t) > 30:  # skip very short fragments
             texts.append(t)
     
-    return "\n".join(texts)
+    # CHANGE: Reduce to 2000 chars instead of full text (75% savings!)
+    return "\n".join(texts)[:2000]
 
 async def fetch_html(url: str) -> str:
     """Helper to fetch HTML from a URL with rate limiting."""
@@ -130,6 +153,12 @@ def clean_document_requirements(documents: list) -> list:
     return unique_docs
 
 async def extract_schemes_with_ai(raw_text: str, source_url: str) -> list:
+    # Check cache first (ZERO TOKENS if cached)
+    cached = scraper_cache.get(raw_text)
+    if cached:
+        print("📦 Scraper cache hit — zero tokens used!")
+        return cached
+    
     # Clean and trim text first
     clean_text = " ".join(raw_text.split())[:settings.MAX_TEXT_LENGTH]  # limit text length
     
@@ -137,44 +166,16 @@ async def extract_schemes_with_ai(raw_text: str, source_url: str) -> list:
         print(f"⚠️ Too little text extracted from {source_url}")
         return []
 
-    prompt = f"""
-You are extracting Kerala government welfare schemes from scraped website text.
+    prompt = f"""Extract Kerala welfare schemes from text.
+Rules:
+1. Extract EVERY scheme mentioned
+2. Categories: pension/healthcare/housing/disability/agriculture/education/women/general
+3. Use "Not specified" for missing data
+4. Return ONLY JSON array
 
-IMPORTANT RULES:
-1. Extract EVERY scheme mentioned — do not skip any
-2. If you see 10 scheme names, return 10 objects
-3. Never combine two schemes into one
-4. Use these exact categories only:
-   pension / healthcare / housing / disability / 
-   agriculture / education / women / general
-5. "general" ONLY if no other category fits
-6. If a field has no data write "Not specified"
+Each scheme: {{"title":"...","description":"...","benefits":"...","eligibility":"...","documents_required":["doc1","doc2"],"category":"...","state":"Kerala"}}
 
-DOCUMENT REQUIREMENTS EXTRACTION:
-- Look for specific document names mentioned in the text
-- Examples: "Aadhaar card", "Voter ID", "Ration card", "Income certificate", 
-  "Age proof", "Disability certificate", "Bank passbook", "Passport photo",
-  "Domicile certificate", "Caste certificate", "BPL card", "Land records"
-- Extract ONLY documents explicitly mentioned in the text
-- Do NOT add generic documents unless specified in the source text
-- If no documents are mentioned, use empty array []
-
-Return ONLY a valid JSON array. No markdown. No explanation.
-
-Each object must have:
-{{
-  "title": "exact scheme name",
-  "description": "what this scheme is about",
-  "benefits": "what the beneficiary receives (amount, services)",
-  "eligibility": "who can apply (age, income, occupation, etc)",
-  "documents_required": ["specific document1", "specific document2"],
-  "application_process": "how to apply",
-  "category": "one of the 8 categories above"
-}}
-
-Text to extract from:
-{clean_text}
-"""
+Text: {clean_text}"""
 
     try:
         # Use Groq first for scraping (faster JSON extraction)
@@ -205,6 +206,10 @@ Text to extract from:
                 scheme['documents_required'] = clean_document_requirements(scheme['documents_required'])
         
         print(f"✅ Extracted {len(schemes)} schemes from {source_url}")
+        
+        # Cache the response
+        scraper_cache.set(raw_text, schemes)
+        
         return schemes
 
     except json.JSONDecodeError as e:
@@ -406,6 +411,24 @@ async def scrape_schemes():
     
     for source in SOURCES:
         try:
+            # Check if URL was scraped in last 12 hours (ZERO TOKENS if recently scraped)
+            from datetime import datetime, timedelta
+            from db.mongo import get_db
+            
+            db = get_db()
+            last_scrape = await db.scrape_logs.find_one({
+                "url": source["url"],
+                "status": "success",
+                "scraped_at": {
+                    "$gte": datetime.utcnow() - timedelta(hours=12)
+                }
+            })
+            
+            if last_scrape:
+                print(f"\n⏭️ Skipping {source['name']} — scraped recently (ZERO tokens!)")
+                results_summary[source["name"]] = 0
+                continue
+            
             html = await fetch_html(source["url"])
             text = extract_text_from_html(html)
             

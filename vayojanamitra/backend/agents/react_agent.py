@@ -1,7 +1,51 @@
 import time
 import json
-import re
+import hashlib
 from datetime import datetime
+
+# Static responses to save tokens
+STATIC_RESPONSES = {
+    "what is vayojanamitra": 
+        "Vayojanamitra is a Kerala welfare scheme assistant for elderly citizens.",
+    
+    "helpline": 
+        "• Elderline: 14567\n"
+        "• Health: 104\n"
+        "• Police: 100",
+    
+    "contact":
+        "Call Elderline: 14567 (free, 24/7)",
+    
+    "thank you":
+        "You're welcome! Feel free to ask anything.",
+    
+    "thanks":
+        "Happy to help! Is there anything else?",
+    
+    "bye":
+        "Goodbye! Take care. Call 14567 if you need help.",
+    
+    "ok":
+        "Sure! What would you like to know about Kerala welfare schemes?",
+}
+
+# Response cache to avoid duplicate AI calls
+class ResponseCache:
+    def __init__(self):
+        self.cache = {}  # in-memory cache
+    
+    def get_key(self, prompt: str) -> str:
+        return hashlib.md5(prompt.encode()).hexdigest()[:16]
+    
+    def get(self, prompt: str):
+        key = self.get_key(prompt)
+        return self.cache.get(key)
+    
+    def set(self, prompt: str, response: str):
+        key = self.get_key(prompt)
+        self.cache[key] = response
+
+cache = ResponseCache()
 from agents.tools import TOOLS_REGISTRY, AgentTools
 from db.mongo import get_db
 from config import settings
@@ -9,6 +53,9 @@ import httpx
 import os
 from bson import ObjectId
 from utils.llm_rotator import llm_rotator
+from db.chroma import chroma_client
+import json
+import hashlib
 
 class ReActAgent:
     
@@ -26,13 +73,38 @@ class ReActAgent:
     
     async def _call_ai(self, prompt: str, max_tokens: int = 400, prefer: str = "gemini") -> str:
         """Call AI API with automatic rotation - uses Gemini first, falls back to Groq"""
-        return await llm_rotator.call(prompt, max_tokens=max_tokens, prefer=prefer)
+        
+        # Check cache first (ZERO TOKENS if cached)
+        cached = cache.get(prompt)
+        if cached:
+            print("📦 Cache hit — zero tokens used!")
+            return cached
+        
+        # Call API
+        response = await llm_rotator.call(prompt, max_tokens=max_tokens, prefer=prefer)
+        
+        # Cache the response
+        cache.set(prompt, response)
+        
+        return response
     
     async def run(self, message: str) -> dict:
         """
         Enhanced agent with AI-powered intent detection and responses
         """
         try:
+            # ── STATIC RESPONSES (ZERO TOKENS) ──
+            msg_lower = message.strip().lower()
+            for trigger, response in STATIC_RESPONSES.items():
+                if trigger in msg_lower:
+                    return {
+                        "response": response,
+                        "steps_taken": 0,
+                        "scheme_cards": [],
+                        "eligibility_result": None,
+                        "agent_thoughts": ["Static response"]
+                    }
+            
             # Fetch user profile once at start
             try:
                 user = await self.db.users.find_one({"_id": ObjectId(self.user_id)})
@@ -64,29 +136,10 @@ class ReActAgent:
                     "agent_thoughts": ["Greeting response"]
                 }
             
-            # ── AI-POWERED INTENT DETECTION ──
-            intent_prompt = f"""
-Analyze this user message and extract key information.
-User message: "{message}"
-User profile: Age {user.get('age', 'N/A')}, Location {user.get('location', 'N/A')}
-
-Return ONLY this JSON, no markdown:
-{{
-  "intent": "search|compare|explain|howto|eligibility|guidance|offtopic",
-  "main_topic": "exact scheme or topic user is asking about",
-  "keywords": ["keyword1", "keyword2"],
-  "is_welfare_related": true or false
-}}
-
-Intent definitions:
-- search: looking for schemes
-- compare: comparing two schemes
-- explain: asking what a scheme is
-- howto: asking how to apply
-- eligibility: asking if they qualify
-- guidance: asking for general help
-- offtopic: not related to welfare/schemes
-"""
+            # ── AI-POWERED INTENT DETECTION (REDUCED PROMPT) ──
+            intent_prompt = f"""Kerala welfare assistant. User: "{message}"
+Profile: Age {user.get('age', 'N/A')}, {user.get('location', 'N/A')}
+Return JSON only: {{"intent":"search|explain|howto|eligibility|offtopic","main_topic":"...","is_welfare_related":true}}"""
             
             intent_raw = await self._call_ai(intent_prompt)
             
@@ -120,19 +173,12 @@ Intent definitions:
                     "agent_thoughts": ["Off-topic question detected"]
                 }
             
-            # ── AI-POWERED RESPONSE GENERATION ──
+            # ── AI-POWERED RESPONSE GENERATION (REDUCED PROMPT) ──
             if intent in ["explain", "compare", "howto", "guidance"]:
-                response_prompt = f"""
-You are Mitra, helping elderly Kerala citizens.
-User asked: "{message}"
-User profile: Age {user.get('age', 'N/A')}, Location {user.get('location', 'N/A')}
-
-Provide a helpful, clear response about {main_topic}.
-Use simple language suitable for elderly citizens.
-Use • for bullet points.
-Be honest about what you know and don't know.
-If you don't have information, say so clearly.
-"""
+                response_prompt = f"""Mitra helper. User: "{message}"
+Profile: Age {user.get('age', 'N/A')}, {user.get('location', 'N/A')}
+Topic: {main_topic}
+Provide helpful response about {main_topic}. Use simple language and bullet points."""
                 
                 ai_response = await self._call_ai(response_prompt)
                 
