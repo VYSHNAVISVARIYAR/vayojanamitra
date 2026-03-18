@@ -1,66 +1,117 @@
-async def run(self, message: str) -> dict:
-    try:
-        # Fetch user profile
+import time
+import json
+import re
+from datetime import datetime
+from agents.tools import TOOLS_REGISTRY, AgentTools
+from db.mongo import get_db
+from config import settings
+import httpx
+import os
+from bson import ObjectId
+import google.generativeai as genai
+
+class ReActAgent:
+    
+    MAX_STEPS = 5  # prevent infinite loops
+    
+    def __init__(self, user_id: str, session_id: str, db):
+        self.user_id = user_id
+        self.session_id = session_id
+        self.db = db
+        self.steps = []
+        self.start_time = time.time()
+        
+        # Initialize Gemini
+        genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+        self.gemini_model = genai.GenerativeModel('gemini-pro')
+        
+        # Initialize OpenRouter
+        self.openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
+        self.openrouter_url = "https://openrouter.ai/api/v1/chat/completions"
+    
+    async def _call_gemini(self, prompt: str) -> str:
+        """Call Gemini API"""
         try:
-            user = await self.db.users.find_one(
-                {"_id": ObjectId(self.user_id)}
-            )
-        except Exception:
-            user = await self.db.users.find_one(
-                {"_id": self.user_id}
-            )
-
-        if not user:
-            user = {
-                "age": "Not specified",
-                "gender": "Not specified",
-                "income_annual": "Not specified",
-                "location": "Kerala",
-                "occupation": "Not specified",
-                "health_conditions": []
+            response = self.gemini_model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            print(f"Gemini API error: {e}")
+            return ""
+    
+    async def _call_openrouter(self, prompt: str, model: str = "anthropic/claude-3-haiku") -> str:
+        """Call OpenRouter API"""
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.openrouter_api_key}",
+                "Content-Type": "application/json"
             }
-
-        health = user.get('health_conditions', [])
-        health_str = ', '.join([str(h) for h in health]) \
-                     if health else 'None'
-
-        user_profile_summary = (
-            f"Age: {user.get('age', 'N/A')}, "
-            f"Location: {user.get('location', 'Kerala')}, "
-            f"Income: Rs {user.get('income_annual', 'N/A')}/year, "
-            f"Occupation: {user.get('occupation', 'N/A')}, "
-            f"Health: {health_str}"
-        )
-
-        msg_lower = message.strip().lower()
-
-        # ── 1. GREETING ──────────────────────────────
-        greetings = [
-            "hi", "hello", "hey", "good morning",
-            "good evening", "good afternoon",
-            "namaste", "hai", "helo", "vanakkam"
-        ]
-        if msg_lower in greetings:
-            return {
-                "response": (
-                    f"Hello! Welcome to Vayojanamitra 🌿\n\n"
-                    f"• I can help you find pension, healthcare, "
-                    f"housing, disability and other schemes\n"
-                    f"• Your profile: Age {user.get('age','N/A')}, "
-                    f"{user.get('location','Kerala')}\n"
-                    f"• Just ask me anything!"
-                ),
-                "steps_taken": 0,
-                "scheme_cards": [],
-                "eligibility_result": None,
-                "agent_thoughts": ["Greeting detected"]
+            data = {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}]
             }
-
-        # ── 2. USE GROQ TO UNDERSTAND INTENT ────────
-        # Let Groq decide what the user is really asking
-        intent_prompt = f"""
+            async with httpx.AsyncClient() as client:
+                response = await client.post(self.openrouter_url, headers=headers, json=data)
+                if response.status_code == 200:
+                    result = response.json()
+                    return result["choices"][0]["message"]["content"]
+                else:
+                    print(f"OpenRouter API error: {response.status_code}")
+                    return ""
+        except Exception as e:
+            print(f"OpenRouter API error: {e}")
+            return ""
+    
+    async def _call_ai(self, prompt: str, use_gemini: bool = True) -> str:
+        """Call AI API - tries Gemini first, falls back to OpenRouter"""
+        if use_gemini:
+            result = await self._call_gemini(prompt)
+            if result:
+                return result
+        
+        # Fallback to OpenRouter
+        return await self._call_openrouter(prompt)
+    
+    async def run(self, message: str) -> dict:
+        """
+        Enhanced agent with AI-powered intent detection and responses
+        """
+        try:
+            # Fetch user profile once at start
+            try:
+                user = await self.db.users.find_one({"_id": ObjectId(self.user_id)})
+            except:
+                # Fallback to string lookup if ObjectId conversion fails
+                user = await self.db.users.find_one({"_id": self.user_id})
+            if not user:
+                user = {
+                    "age": "Not specified",
+                    "gender": "Not specified", 
+                    "income_annual": "Not specified",
+                    "location": "Not specified",
+                    "occupation": "Not specified",
+                    "health_conditions": []
+                }
+        
+            # ── Quick reply for greetings ──
+            greetings = ["hi", "hello", "hey", "good morning", "good evening", 
+                         "good afternoon", "namaste", "hai", "helo", "vanakkam"]
+            
+            if message.strip().lower() in greetings:
+                greeting_response = f"Hello! Welcome to Vayojanamitra 🌿\n\n• I can help you find pension, healthcare, and housing schemes\n• Based on your profile (Age: {user.get('age', 'N/A')}, Location: {user.get('location', 'N/A')}), I can guide you better\n• Just ask me anything!"
+                
+                return {
+                    "response": greeting_response,
+                    "steps_taken": 0,
+                    "scheme_cards": [],
+                    "eligibility_result": None,
+                    "agent_thoughts": ["Greeting response"]
+                }
+            
+            # ── AI-POWERED INTENT DETECTION ──
+            intent_prompt = f"""
 Analyze this user message and extract key information.
 User message: "{message}"
+User profile: Age {user.get('age', 'N/A')}, Location {user.get('location', 'N/A')}
 
 Return ONLY this JSON, no markdown:
 {{
@@ -79,527 +130,137 @@ Intent definitions:
 - guidance: asking for general help
 - offtopic: not related to welfare/schemes
 """
-        intent_raw = await self._call_groq(intent_prompt)
-
-        # Parse intent
-        try:
-            clean = intent_raw.strip()
-            if "```" in clean:
-                clean = clean.split("```")[1]
-                if clean.startswith("json"):
-                    clean = clean[4:]
-            intent_data = json.loads(clean.strip())
-        except Exception:
-            intent_data = {
-                "intent": "search",
-                "main_topic": message,
-                "keywords": [message],
-                "is_welfare_related": True
-            }
-
-        main_topic = intent_data.get("main_topic", message)
-        intent = intent_data.get("intent", "search")
-        is_welfare = intent_data.get("is_welfare_related", True)
-        keywords = intent_data.get("keywords", [message])
-
-        print(f"Intent: {intent}, Topic: {main_topic}, "
-              f"Welfare: {is_welfare}")
-
-        # ── 3. OFF-TOPIC HANDLER ─────────────────────
-        if not is_welfare:
-            return {
-                "response": (
-                    "I can only help with Kerala government "
-                    "welfare schemes and benefits.\n\n"
-                    "• Try asking about pension schemes\n"
-                    "• Healthcare benefits\n"
-                    "• Housing assistance\n"
-                    "• Disability support\n\n"
-                    "What welfare scheme would you like to know about?"
-                ),
-                "steps_taken": 0,
-                "scheme_cards": [],
-                "eligibility_result": None,
-                "agent_thoughts": ["Off-topic question detected"]
-            }
-
-        # ── 4. GUIDANCE HANDLER ──────────────────────
-        if intent == "guidance":
-            guidance_prompt = f"""
-You are Mitra, helping an elderly Kerala citizen.
-User said: "{message}"
-User Profile: {user_profile_summary}
-
-Give PROACTIVE personalized guidance based on their profile.
-
-FORMAT:
-Based on your profile, here is what I recommend:
-- [Scheme]: [why it suits them]
-- [Scheme]: [why it suits them]
-- [Scheme]: [why it suits them]
-
-To get started:
-1. [First action]
-2. [Second action]
-
-Would you like me to explain any of these schemes?
-
-Use • for bullets. Plain text only.
-"""
-            response = await self._call_groq(guidance_prompt)
-            await self._save_log(message, response)
-            return {
-                "response": response,
-                "steps_taken": 1,
-                "scheme_cards": [],
-                "eligibility_result": None,
-                "agent_thoughts": [
-                    "Guidance provided based on profile"
-                ]
-            }
-
-        # ── 5. COMPARISON HANDLER ────────────────────
-        if intent == "compare":
-            comparison_prompt = f"""
-You are Mitra, helping elderly Kerala citizens.
-User asked: "{message}"
-
-Give a CLEAR comparison. Use this format:
-
-[Scheme 1 Name]:
-- What it is: [explanation]
-- Benefit: [key benefit]
-- Who can apply: [eligibility]
-
-[Scheme 2 Name]:
-- What it is: [explanation]
-- Benefit: [key benefit]
-- Who can apply: [eligibility]
-
-Key Difference: [one sentence]
-
-STRICT RULE: Only answer about the schemes 
-the user specifically asked about.
-If you don't know a scheme → say 
-"I don't have information about [scheme name]"
-Plain text only. Use • for bullets.
-"""
-            response = await self._call_groq(comparison_prompt)
-            await self._save_log(message, response)
-            return {
-                "response": response,
-                "steps_taken": 1,
-                "scheme_cards": [],
-                "eligibility_result": None,
-                "agent_thoughts": ["Comparison answered"]
-            }
-
-        # ── 6. HOW-TO HANDLER ───────────────────────
-        if intent == "howto":
-            howto_prompt = f"""
-You are Mitra, helping elderly Kerala citizens.
-User asked: "{message}"
-User profile: {user_profile_summary}
-
-Give step-by-step instructions ONLY for what user asked.
-
-Steps to Apply for {main_topic}:
-1. [Step 1]
-2. [Step 2]
-3. [Step 3]
-
-Documents needed:
-- [Document 1]
-- [Document 2]
-
-Office: [specific office]
-Timing: Mon-Fri, 10am to 5pm
-
-STRICT RULE: Only give steps for {main_topic}.
-If you don't know → say 
-"I don't have application details for {main_topic}"
-Plain text only.
-"""
-            response = await self._call_groq(howto_prompt)
-            await self._save_log(message, response)
-            return {
-                "response": response,
-                "steps_taken": 1,
-                "scheme_cards": [],
-                "eligibility_result": None,
-                "agent_thoughts": ["How-to answered"]
-            }
-
-        # ── 7. EXPLAIN HANDLER ───────────────────────
-        if intent == "explain":
-            # First check if scheme exists in MongoDB
-            scheme_in_db = await self.db.schemes.find_one({
-                "title": {
-                    "$regex": main_topic,
-                    "$options": "i"
+            
+            intent_raw = await self._call_ai(intent_prompt)
+            
+            # Parse intent
+            try:
+                clean = intent_raw.strip()
+                if "```" in clean:
+                    clean = clean.split("```")[1]
+                    if clean.startswith("json"):
+                        clean = clean[4:]
+                intent_data = json.loads(clean.strip())
+            except Exception:
+                intent_data = {
+                    "intent": "search",
+                    "main_topic": message,
+                    "keywords": [message],
+                    "is_welfare_related": True
                 }
-            })
-
-            if scheme_in_db:
-                # Use real database data
-                explain_prompt = f"""
-You are Mitra, helping elderly Kerala citizens.
-User asked: "{message}"
-
-Here is the real scheme data from our database:
-Title: {scheme_in_db.get('title')}
-Description: {scheme_in_db.get('description')}
-Benefits: {scheme_in_db.get('benefits')}
-Eligibility: {scheme_in_db.get('eligibility')}
-Documents: {scheme_in_db.get('documents_required')}
-How to apply: {scheme_in_db.get('application_process')}
-
-Explain this scheme in simple language:
-- What it is: [simple explanation]
-- Benefit: [key benefit]
-- Who can apply: [eligibility simple]
-- Documents needed: [list]
-- How to apply: [simple steps]
-Next Step: [one action]
-
-Plain text. Use •. Simple language for elderly.
-"""
-            else:
-                # Not in database — use Groq knowledge
-                # but be honest about source
-                explain_prompt = f"""
-You are Mitra, helping elderly Kerala citizens.
-User asked about: "{main_topic}"
-
-This scheme is not in our database.
-Use your knowledge about Kerala/India welfare schemes.
-
-If you know about {main_topic}, explain it:
-- What it is: [explanation]
-- Benefit: [key benefit]
-- Who can apply: [eligibility]
-- How to apply: [steps]
-Next Step: [action]
-
-If you DON'T know about {main_topic}, respond EXACTLY:
-"I don't have information about {main_topic} in my database. 
-Please visit your nearest Akshaya Centre or 
-call Elderline: 14567 for accurate details."
-
-NEVER make up information.
-Plain text only. Use •.
-"""
-
-            response = await self._call_groq(explain_prompt)
-
-            # Clean unwanted phrases
-            response = response.replace(
-                "I found limited info in my database, but", ""
-            ).replace(
-                "I found limited info in my database,", ""
-            ).strip()
-
-            await self._save_log(message, response)
-            return {
-                "response": response,
-                "steps_taken": 1,
-                "scheme_cards": (
-                    [{
-                        **scheme_in_db,
-                        "_id": str(scheme_in_db["_id"])
-                    }] if scheme_in_db else []
-                ),
-                "eligibility_result": None,
-                "agent_thoughts": [
-                    f"Explained {main_topic}",
-                    "From DB" if scheme_in_db else "From Groq knowledge"
-                ]
-            }
-
-        # ── 8. ELIGIBILITY HANDLER ───────────────────
-        if intent == "eligibility":
-            # Find the specific scheme user asked about
-            scheme = await self.db.schemes.find_one({
-                "title": {
-                    "$regex": main_topic,
-                    "$options": "i"
-                }
-            })
-
-            if not scheme:
-                # Try keyword search
-                tools = AgentTools(self.db)
-                results = await tools.search_schemes(main_topic)
-                if results:
-                    scheme = results[0]
-
-            if scheme:
-                tools = AgentTools(self.db)
-                eligibility = await tools.check_eligibility(
-                    str(scheme["_id"]),
-                    self.user_id
-                )
-                response = (
-                    f"Eligibility check for "
-                    f"**{scheme.get('title')}**:\n\n"
-                    f"• Result: {eligibility.get('result','Unknown')}\n"
-                    f"• Reason: {eligibility.get('reason','')}\n"
-                    f"• Next Step: "
-                    f"{eligibility.get('next_steps','Visit office')}"
-                )
-                await self._save_log(message, response)
+            
+            main_topic = intent_data.get("main_topic", message)
+            intent = intent_data.get("intent", "search")
+            is_welfare = intent_data.get("is_welfare_related", True)
+            
+            # ── OFF-TOPIC HANDLER ──
+            if not is_welfare:
                 return {
-                    "response": response,
-                    "steps_taken": 2,
-                    "scheme_cards": [{
-                        **scheme,
-                        "_id": str(scheme["_id"])
-                    }],
-                    "eligibility_result": eligibility,
-                    "agent_thoughts": [
-                        "Found scheme",
-                        "Checked eligibility"
-                    ]
+                    "response": "I can only help with Kerala government welfare schemes and benefits.\n\n• Try asking about pension schemes\n• Healthcare benefits\n• Housing assistance\n• Disability support\n\nWhat welfare scheme would you like to know about?",
+                    "steps_taken": 0,
+                    "scheme_cards": [],
+                    "eligibility_result": None,
+                    "agent_thoughts": ["Off-topic question detected"]
                 }
-            else:
+            
+            # ── AI-POWERED RESPONSE GENERATION ──
+            if intent in ["explain", "compare", "howto", "guidance"]:
+                response_prompt = f"""
+You are Mitra, helping elderly Kerala citizens.
+User asked: "{message}"
+User profile: Age {user.get('age', 'N/A')}, Location {user.get('location', 'N/A')}
+
+Provide a helpful, clear response about {main_topic}.
+Use simple language suitable for elderly citizens.
+Use • for bullet points.
+Be honest about what you know and don't know.
+If you don't have information, say so clearly.
+"""
+                
+                ai_response = await self._call_ai(response_prompt)
+                
                 return {
-                    "response": (
-                        f"I don't have information about "
-                        f"**{main_topic}** in my database.\n\n"
-                        f"Please visit your nearest Akshaya Centre "
-                        f"or call Elderline: 14567 for eligibility details."
-                    ),
+                    "response": ai_response,
                     "steps_taken": 1,
                     "scheme_cards": [],
                     "eligibility_result": None,
-                    "agent_thoughts": ["Scheme not found in database"]
+                    "agent_thoughts": [f"AI response for {intent} about {main_topic}"]
                 }
-
-        # ── 9. SEARCH HANDLER ────────────────────────
-        # Only runs for intent == "search"
-        tools = AgentTools(self.db)
-        schemes = []
-
-        # Search MongoDB by category first
-        category_map = {
-            "pension":     ["pension", "monthly payment",
-                            "old age", "retirement"],
-            "healthcare":  ["health", "medical", "hospital",
-                            "treatment", "medicine", "healthcare"],
-            "housing":     ["house", "housing", "home",
-                            "construction", "shelter"],
-            "disability":  ["disability", "disabled",
-                            "handicap", "differently abled"],
-            "agriculture": ["farmer", "farm", "agriculture",
-                            "crop", "kisan", "karshaka"],
-            "education":   ["education", "scholarship",
-                            "student", "school"],
-            "women":       ["widow", "women", "mahila",
-                            "maternity"],
-        }
-
-        detected_category = None
-        for category, kws in category_map.items():
-            if any(kw in msg_lower for kw in kws):
-                detected_category = category
-                break
-
-        # Priority 1: MongoDB category filter
-        if detected_category:
-            mongo_schemes = await self.db.schemes.find(
-                {
-                    "category": detected_category,
-                    "is_active": True
-                }
-            ).limit(5).to_list(5)
-
-            if mongo_schemes:
-                for s in mongo_schemes:
-                    s["_id"] = str(s["_id"])
-                schemes = mongo_schemes
-
-        # Priority 2: MongoDB text search
-        if not schemes:
+            
+            # ── SCHEME SEARCH (for search and eligibility intents) ──
             try:
-                text_results = await self.db.schemes.find(
-                    {"$text": {"$search": main_topic}}
-                ).limit(5).to_list(5)
-                if text_results:
-                    for s in text_results:
-                        s["_id"] = str(s["_id"])
-                    schemes = text_results
-            except Exception as e:
-                print(f"Text search error: {e}")
-
-        # Priority 3: ChromaDB
-        if not schemes:
-            chroma = await tools.search_schemes(main_topic)
-            if chroma:
-                # Only keep results that match the topic
-                relevant = [
-                    s for s in chroma
-                    if any(
-                        kw.lower() in str(s.get('title','')).lower()
-                        or kw.lower() in str(
-                            s.get('description','')).lower()
-                        for kw in keywords
-                    )
-                ]
-                schemes = relevant if relevant else []
-
-        # Filter out Malayalam schemes
-        schemes = [
-            s for s in schemes
-            if not self._is_mostly_malayalam(
-                s.get('title', '')
-            )
-        ]
-
-        # ── STRICT: Only show if actually relevant ──
-        if schemes:
-            # Verify schemes match what user asked
-            verify_prompt = f"""
-User asked: "{message}"
-Main topic: "{main_topic}"
-
-These schemes were found in database:
-{json.dumps([{'title': s.get('title',''), 
-              'category': s.get('category','')} 
-             for s in schemes], indent=2)}
-
-Are these schemes ACTUALLY relevant to what user asked?
-Return ONLY JSON:
-{{"relevant": true or false, 
-  "relevant_titles": ["title1", "title2"]}}
-
-Be STRICT. If scheme is about savings/investment 
-but user asked about food/health → mark as not relevant.
-"""
-            verify_raw = await self._call_groq(verify_prompt)
-
-            try:
-                clean = verify_raw.strip()
-                if "```" in clean:
-                    parts = clean.split("```")
-                    clean = parts[1] if len(parts) > 1 else parts[0]
-                    if clean.startswith("json"):
-                        clean = clean[4:]
-                verify_data = json.loads(clean.strip())
+                tools = AgentTools(self.db)
+                schemes = await tools.search_schemes(main_topic)
                 
-                if not verify_data.get("relevant", True):
-                    schemes = []
-                else:
-                    relevant_titles = verify_data.get(
-                        "relevant_titles", []
-                    )
-                    if relevant_titles:
-                        schemes = [
-                            s for s in schemes
-                            if s.get("title") in relevant_titles
-                        ]
-            except Exception:
-                pass
-
-        if schemes:
-            response_prompt = f"""
+                if schemes:
+                    # Use AI to format the response
+                    search_prompt = f"""
 You are Mitra, helping elderly Kerala citizens.
 User asked: "{message}"
-User profile: {user_profile_summary}
+User profile: Age {user.get('age', 'N/A')}, Location {user.get('location', 'N/A')}
 
-ONLY answer about these specific schemes from database:
-{json.dumps([{{
-    'title': s.get('title',''),
-    'benefits': s.get('benefits',''),
-    'eligibility': s.get('eligibility','')
-}} for s in schemes], indent=2)}
+Found these schemes in the database:
+{json.dumps([{'title': s.get('title', ''), 'description': s.get('description', '')[:100]} for s in schemes[:5]], indent=2)}
 
-FORMAT:
-Here are schemes for [topic]:
-- [Title]: [benefit in one line]
-- [Title]: [benefit in one line]
-Next Step: [one specific action]
-
-STRICT RULES:
-- Only mention schemes from the list above
-- Do not add schemes not in the list
-- Do not say "I found limited info"
+Format a helpful response:
+- Mention relevant schemes from the list above
+- Keep it simple and clear
 - Use • for bullets
-- Plain text only
+- Add a helpful next step
+- Don't make up schemes not in the list
 """
-            response = await self._call_groq(response_prompt)
+                    
+                    ai_response = await self._call_ai(search_prompt)
+                    
+                    return {
+                        "response": ai_response,
+                        "steps_taken": 1,
+                        "scheme_cards": schemes[:3],
+                        "eligibility_result": None,
+                        "agent_thoughts": ["AI-formatted search results"]
+                    }
+                else:
+                    # No schemes found - use AI to provide helpful guidance
+                    fallback_prompt = f"""
+You are Mitra, helping elderly Kerala citizens.
+User asked: "{message}"
+User profile: Age {user.get('age', 'N/A')}, Location {user.get('location', 'N/A')}
 
-            response = response.replace(
-                "I found limited info in my database, but", ""
-            ).replace(
-                "I found limited info in my database,", ""
-            ).strip()
+I couldn't find schemes matching "{main_topic}" in my database.
 
-            if not response or response.startswith("{"):
-                response = self._build_fallback(
-                    schemes,
-                    detected_category or "welfare",
-                    user
-                )
-
-        else:
-            # Truly not found — be honest
-            response = (
-                f"I don't have information about "
-                f"**{main_topic}** in my database.\n\n"
-                f"• Please visit your nearest Akshaya Centre\n"
-                f"• Or call Elderline: 14567\n"
-                f"• Or visit: socialjustice.gov.in\n\n"
-                f"Would you like me to help you find "
-                f"a similar scheme?"
-            )
-
-        await self._save_log(message, response)
-        return {
-            "response": response,
-            "steps_taken": 1,
-            "scheme_cards": schemes[:3] if schemes else [],
-            "eligibility_result": None,
-            "agent_thoughts": [
-                f"Intent: {intent}",
-                f"Topic: {main_topic}",
-                f"Found: {len(schemes)} relevant schemes"
-            ]
-        }
-
-    except Exception as e:
-        import traceback
-        print(f"❌ Error: {traceback.format_exc()}")
-        return {
-            "response": (
-                "I'm sorry, I encountered an error.\n"
-                "Please try again or call Elderline: 14567"
-            ),
-            "steps_taken": 0,
-            "scheme_cards": [],
-            "eligibility_result": None,
-            "agent_thoughts": ["Error occurred"]
-        }
-
-def _is_mostly_malayalam(self, text: str) -> bool:
-    """Returns True if text is mostly Malayalam"""
-    if not text:
-        return False
-    malayalam = sum(
-        1 for c in text
-        if '\u0D00' <= c <= '\u0D7F'
-    )
-    return len(text) > 0 and malayalam / len(text) > 0.3
-
-def _build_fallback(
-    self, schemes, category, user
-) -> str:
-    response = f"Here are {category} schemes for you:\n"
-    for s in schemes[:4]:
-        title = s.get('title', '')
-        benefit = s.get('benefits', '')[:80]
-        response += f"• {title}: {benefit}\n"
-    response += (
-        f"\nNext Step: Visit nearest Akshaya Centre "
-        f"in {user.get('location', 'Kerala')} to apply."
-    )
-    return response
+Provide helpful guidance:
+- Suggest alternative search terms
+- Recommend general categories of schemes they might be interested in
+- Provide contact information for local offices
+- Be encouraging and helpful
+"""
+                    
+                    ai_response = await self._call_ai(fallback_prompt)
+                    
+                    return {
+                        "response": ai_response,
+                        "steps_taken": 1,
+                        "scheme_cards": [],
+                        "eligibility_result": None,
+                        "agent_thoughts": ["AI fallback guidance"]
+                    }
+                    
+            except Exception as e:
+                print(f"Search failed: {e}")
+                return {
+                    "response": "I'm having some technical difficulties searching for schemes right now. Please try again in a few moments or visit your nearest Kerala Social Security Mission office for immediate assistance.",
+                    "steps_taken": 0,
+                    "scheme_cards": [],
+                    "eligibility_result": None,
+                    "agent_thoughts": ["Technical difficulties - using fallback"]
+                }
+            
+        except Exception as e:
+            print(f"Critical error in agent: {e}")
+            return {
+                "response": "I'm experiencing technical difficulties right now. Please try again later or contact support for assistance.",
+                "steps_taken": 0,
+                "scheme_cards": [],
+                "eligibility_result": None,
+                "agent_thoughts": ["Critical error occurred"]
+            }
