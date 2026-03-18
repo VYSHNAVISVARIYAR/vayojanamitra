@@ -100,7 +100,7 @@ const SchemeExplorer = () => {
     const params = new URLSearchParams();
     if (category !== 'all') params.set('category', category);
     if (searchQuery) params.set('q', searchQuery);
-    if (sortBy !== 'latest') params.set('sort', sortBy);
+    if (sortBy) params.set('sort', sortBy);
     if (page > 1) params.set('page', page.toString());
     
     setSearchParams(params);
@@ -116,7 +116,7 @@ const SchemeExplorer = () => {
       
       if (category !== 'all') params.set('category', category);
       if (searchQuery) params.set('q', searchQuery);
-      if (sortBy !== 'latest') params.set('sort', sortBy);
+      if (sortBy) params.set('sort', sortBy);
       
       const response = await axios.get(`http://localhost:8000/schemes/?${params}`);
       

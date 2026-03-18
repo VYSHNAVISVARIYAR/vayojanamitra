@@ -50,7 +50,23 @@ async def get_schemes(
         sort_field = "last_updated"
         sort_direction = -1  # descending by default
         
-        if sort == "az":
+        if sort == "name_asc":
+            sort_field = "title"
+            sort_direction = 1
+            cursor = db["schemes"].find(filter_query).sort(sort_field, sort_direction).skip(skip).limit(limit)
+        elif sort == "name_desc":
+            sort_field = "title"
+            sort_direction = -1
+            cursor = db["schemes"].find(filter_query).sort(sort_field, sort_direction).skip(skip).limit(limit)
+        elif sort == "oldest":
+            sort_field = "last_updated"
+            sort_direction = 1
+            cursor = db["schemes"].find(filter_query).sort(sort_field, sort_direction).skip(skip).limit(limit)
+        elif sort == "category":
+            sort_field = "category"
+            sort_direction = 1
+            cursor = db["schemes"].find(filter_query).sort(sort_field, sort_direction).skip(skip).limit(limit)
+        elif sort == "az":  # Legacy support
             sort_field = "title"
             sort_direction = 1
             cursor = db["schemes"].find(filter_query).sort(sort_field, sort_direction).skip(skip).limit(limit)
