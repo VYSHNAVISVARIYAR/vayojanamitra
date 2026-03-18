@@ -178,9 +178,12 @@ Return JSON only: {{"intent":"search|explain|howto|eligibility|offtopic","main_t
                 response_prompt = f"""Mitra helper. User: "{message}"
 Profile: Age {user.get('age', 'N/A')}, {user.get('location', 'N/A')}
 Topic: {main_topic}
-Provide helpful response about {main_topic}. Use simple language and bullet points."""
+Provide helpful response about {main_topic}. Use simple language. Use • for bullet points."""
                 
                 ai_response = await self._call_ai(response_prompt)
+                
+                # Clean up asterisks - replace * with • for consistent bullet points
+                ai_response = ai_response.replace('*', '•').replace('**', '•')
                 
                 return {
                     "response": ai_response,
@@ -215,6 +218,9 @@ Format a helpful response:
                     
                     ai_response = await self._call_ai(search_prompt)
                     
+                    # Clean up asterisks - replace * with • for consistent bullet points
+                    ai_response = ai_response.replace('*', '•').replace('**', '•')
+                    
                     return {
                         "response": ai_response,
                         "steps_taken": 1,
@@ -239,6 +245,9 @@ Provide helpful guidance:
 """
                     
                     ai_response = await self._call_ai(fallback_prompt)
+                    
+                    # Clean up asterisks - replace * with • for consistent bullet points
+                    ai_response = ai_response.replace('*', '•').replace('**', '•')
                     
                     return {
                         "response": ai_response,
