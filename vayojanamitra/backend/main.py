@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -128,3 +128,86 @@ async def trigger_proactive():
 async def llm_stats():
     from utils.llm_rotator import llm_rotator
     return llm_rotator.get_stats()
+
+# ── User Stats endpoint ──
+@app.get("/admin/user-stats")
+async def user_stats(db=Depends(get_db)):
+    total = await db.users.count_documents({})
+    complete = await db.users.count_documents(
+        {"is_profile_complete": True}
+    )
+    return {
+        "total": total,
+        "profile_complete": complete,
+        "profile_incomplete": total - complete
+    }
+
+# ── Test LLM endpoint ──
+@app.post("/admin/test-llm")
+async def test_llm():
+    from utils.llm_rotator import llm_rotator
+    result = await llm_rotator.call(
+        "Say 'LLM working!' in one word",
+        max_tokens=10
+    )
+    return {
+        "status": "ok" if result else "failed",
+        "response": result,
+        "stats": llm_rotator.get_stats()
+    }
+
+# ── Re-index ChromaDB endpoint ──
+@app.post("/admin/reindex-chroma")
+async def reindex_chroma(db=Depends(get_db)):
+    from db.chroma import chroma_client
+    schemes = await db.schemes.find(
+        {"is_active": True}
+    ).to_list(None)
+    
+    # Clear existing collection
+    chroma_client.clear_collection()
+    
+    # Re-index all schemes
+    for scheme in schemes:
+        text = (
+            f"{scheme.get('title','')} "
+            f"{scheme.get('description','')} "
+            f"{scheme.get('eligibility','')}"
+        )
+        chroma_client.add_scheme(
+            str(scheme["_id"]),
+            scheme.get("title",""),
+            text,
+            scheme.get("category","")
+        )
+    
+    return {
+        "message": f"Re-indexed {len(schemes)} schemes"
+    }
+
+# ── Schemes Count endpoint ──
+@app.get("/schemes/count")
+async def get_schemes_count(db=Depends(get_db)):
+    """Get total schemes count and breakdown by category."""
+    try:
+        # Total schemes
+        total = await db.schemes.count_documents({"is_active": True})
+        
+        # Schemes by category
+        pipeline = [
+            {"$match": {"is_active": True}},
+            {"$group": {"_id": "$category", "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}}
+        ]
+        
+        category_counts = {}
+        async for doc in db.schemes.aggregate(pipeline):
+            category_counts[doc["_id"]] = doc["count"]
+        
+        return {
+            "total": total,
+            "by_category": category_counts
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting schemes count: {str(e)}")
