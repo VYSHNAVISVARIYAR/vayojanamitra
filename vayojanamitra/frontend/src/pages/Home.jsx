@@ -140,8 +140,8 @@ const Home = () => {
   };
 
   const categories = [
-    { name: 'Pension', icon: '🧓', color: 'bg-blue-100 text-blue-800', count: 0 },
-    { name: 'Healthcare', icon: '🏥', color: 'bg-green-100 text-green-800', count: 0 },
+    { name: 'Pension', icon: '🧓', color: 'bg-teal-100 text-teal-800', count: 0 },
+    { name: 'Healthcare', icon: '🏥', color: 'bg-emerald-100 text-emerald-800', count: 0 },
     { name: 'Housing', icon: '🏠', color: 'bg-orange-100 text-orange-800', count: 0 },
     { name: 'Disability', icon: '♿', color: 'bg-purple-100 text-purple-800', count: 0 },
     { name: 'Agriculture', icon: '🌾', color: 'bg-yellow-100 text-yellow-800', count: 0 },
@@ -151,12 +151,12 @@ const Home = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50 to-emerald-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Loading Skeletons */}
           <div className="space-y-8">
             {/* Welcome Banner Skeleton */}
-            <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-8 text-white shadow-2xl">
+            <div className="bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-700 rounded-2xl p-8 text-white shadow-2xl">
               <div className="space-y-4">
                 <div className="h-8 bg-white/20 rounded w-1/3 animate-pulse"></div>
                 <div className="h-6 bg-white/20 rounded w-1/2 animate-pulse"></div>
@@ -190,7 +190,7 @@ const Home = () => {
 
   if (fetchError) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50 to-emerald-100 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,7 +204,7 @@ const Home = () => {
               setFetchError(null);
               fetchDashboardData();
             }}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
           >
             Try Again
           </button>
@@ -214,16 +214,16 @@ const Home = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50 to-emerald-100">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Banner */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-8 mb-8 text-white shadow-2xl"
+          className="relative overflow-hidden bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-700 rounded-2xl p-8 mb-8 text-white shadow-2xl"
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 animate-pulse"></div>
+          <div className="absolute inset-0 bg-gradient-to-r from-teal-600/20 to-emerald-600/20 animate-pulse"></div>
           <div className="relative z-10">
             <motion.h2 
               initial={{ opacity: 0, x: -20 }}

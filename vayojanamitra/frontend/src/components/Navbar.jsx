@@ -63,7 +63,7 @@ const Navbar = () => {
                 </motion.div>
                 <div>
                   <motion.div 
-                    className="text-xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent"
+                    className="text-xl font-bold bg-gradient-to-r from-teal-600 to-emerald-600 bg-clip-text text-transparent"
                     whileHover={{ scale: 1.05 }}
                   >
                     VayoJanaMitra
@@ -92,8 +92,8 @@ const Navbar = () => {
                       to={item.path}
                       className={`flex items-center space-x-2 px-4 py-2 rounded-xl transition-all duration-300 transform hover:scale-105 ${
                         isActive 
-                          ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/25' 
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 hover:shadow-md'
+                          ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-lg shadow-teal-500/25' 
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-teal-50 hover:shadow-md'
                       }`}
                     >
                       <Icon className="h-4 w-4" />
@@ -107,9 +107,9 @@ const Navbar = () => {
               <div className="relative">
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center space-x-3 px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-all duration-300 hover:shadow-md transform hover:scale-105 border border-gray-200"
+                  className="flex items-center space-x-3 px-4 py-2.5 rounded-xl hover:bg-teal-50 transition-all duration-300 hover:shadow-md transform hover:scale-105 border border-gray-200"
                 >
-                  <div className="w-9 h-9 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold shadow-lg">
+                  <div className="w-9 h-9 bg-gradient-to-r from-teal-500 to-teal-600 rounded-full flex items-center justify-center text-white text-sm font-semibold shadow-lg">
                     {user?.full_name?.charAt(0) || 'U'}
                   </div>
                   <div className="flex flex-col items-start">
@@ -132,7 +132,7 @@ const Navbar = () => {
                     {/* Alerts moved here */}
                     <Link
                       to="/alerts"
-                      className="flex items-center space-x-3 px-4 py-3 text-sm text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 transition-all duration-200"
+                      className="flex items-center space-x-3 px-4 py-3 text-sm text-gray-700 hover:bg-gradient-to-r hover:from-teal-50 hover:to-emerald-50 transition-all duration-200"
                       onClick={() => setUserMenuOpen(false)}
                     >
                       <AlertBadge />
@@ -143,7 +143,7 @@ const Navbar = () => {
                     
                     <Link
                       to="/profile"
-                      className="flex items-center space-x-3 px-4 py-3 text-sm text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 transition-all duration-200"
+                      className="flex items-center space-x-3 px-4 py-3 text-sm text-gray-700 hover:bg-gradient-to-r hover:from-teal-50 hover:to-emerald-50 transition-all duration-200"
                       onClick={() => setUserMenuOpen(false)}
                     >
                       <User className="h-5 w-5 text-gray-600" />
@@ -198,7 +198,7 @@ const Navbar = () => {
               {/* Menu Toggle */}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2.5 rounded-xl hover:bg-gray-100 transition-colors border border-gray-200"
+                className="p-2.5 rounded-xl hover:bg-teal-50 transition-colors border border-gray-200"
               >
                 {mobileMenuOpen ? (
                   <X className="h-5 w-5 text-gray-600" />
@@ -222,8 +222,8 @@ const Navbar = () => {
                     to={item.path}
                     className={`flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${
                       isActive(item.path)
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-100'
+                        ? 'bg-teal-100 text-teal-700'
+                        : 'text-gray-700 hover:bg-teal-50'
                     }`}
                     onClick={() => setMobileMenuOpen(false)}
                   >

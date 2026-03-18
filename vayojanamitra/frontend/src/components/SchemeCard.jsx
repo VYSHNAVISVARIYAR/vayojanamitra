@@ -11,9 +11,9 @@ const SchemeCard = ({ scheme, showWhyRecommended = false, isBookmarked = false, 
   const getCategoryColor = (category) => {
     switch (category?.toLowerCase()) {
       case 'pension':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-teal-100 text-teal-800';
       case 'healthcare':
-        return 'bg-green-100 text-green-800';
+        return 'bg-emerald-100 text-emerald-800';
       case 'housing':
         return 'bg-orange-100 text-orange-800';
       case 'disability':
@@ -157,9 +157,9 @@ const SchemeCard = ({ scheme, showWhyRecommended = false, isBookmarked = false, 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.4 }}
-          className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 p-3 rounded-lg mb-4 relative z-10"
+          className="bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 p-3 rounded-lg mb-4 relative z-10"
         >
-          <p className="text-sm text-green-800 flex items-center">
+          <p className="text-sm text-teal-800 flex items-center">
             <Star className="h-3 w-3 mr-1 flex-shrink-0" />
             {scheme.why_recommended}
           </p>
@@ -187,7 +187,7 @@ const SchemeCard = ({ scheme, showWhyRecommended = false, isBookmarked = false, 
         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
           <Link
             to={`/schemes/${scheme._id}`}
-            className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+            className="inline-flex items-center px-3 py-2 text-sm font-medium text-teal-600 hover:text-teal-700 transition-colors"
           >
             View Details
             <ExternalLink className="h-3 w-3 ml-1" />

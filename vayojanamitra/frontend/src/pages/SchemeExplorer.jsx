@@ -192,7 +192,7 @@ const SchemeExplorer = () => {
                     setCategory(e.target.value);
                     setPage(1);
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                 >
                   {categories.map(cat => (
                     <option key={cat.value} value={cat.value}>{cat.label}</option>
@@ -209,7 +209,7 @@ const SchemeExplorer = () => {
                     setSortBy(e.target.value);
                     setPage(1);
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                 >
                   {sortOptions.map(option => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -240,28 +240,28 @@ const SchemeExplorer = () => {
           {/* Active Filters */}
           <div className="flex items-center space-x-2">
             {category !== 'all' && (
-              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+              <span className="px-3 py-1 bg-teal-100 text-teal-800 rounded-full text-sm">
                 {categories.find(c => c.value === category)?.label}
                 <button
                   onClick={() => {
                     setCategory('all');
                     setPage(1);
                   }}
-                  className="ml-2 text-blue-600 hover:text-blue-800"
+                  className="ml-2 text-teal-600 hover:text-teal-800"
                 >
                   <X className="h-3 w-3 inline" />
                 </button>
               </span>
             )}
             {searchQuery && (
-              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+              <span className="px-3 py-1 bg-teal-100 text-teal-800 rounded-full text-sm">
                 "{searchQuery}"
                 <button
                   onClick={() => {
                     setSearchQuery('');
                     setPage(1);
                   }}
-                  className="ml-2 text-blue-600 hover:text-blue-800"
+                  className="ml-2 text-teal-600 hover:text-teal-800"
                 >
                   <X className="h-3 w-3 inline" />
                 </button>
